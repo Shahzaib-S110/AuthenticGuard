@@ -8,7 +8,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "application/pdf"];
-const API_URL = "/api";
+const API_URL = "https://authenticguard.onrender.com";
 
 const STAGE_LABELS = [
   "Running Error Level Analysis...",
@@ -87,7 +87,14 @@ const AnalyzePage = () => {
         throw new Error(err.detail ?? "Analysis failed");
       }
 
-      const result = await response.json();
+      const text = await response.text();
+
+      let result;
+      try {
+      result = JSON.parse(text);
+      } catch (e) {
+      throw new Error("Invalid JSON from server: " + text);
+      }
       const finalImageUrl = result.originalImage || preview;
       setProgress(100);
       setStageLabel("Analysis complete!");
