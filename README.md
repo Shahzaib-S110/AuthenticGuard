@@ -1,45 +1,38 @@
-🔍 Document Forgery Detection
+🔍 Document Forgery Detection (AuthenticGuard)
 <div align="center">
 
-
-
-
-
-
-
-
-An AI-powered full-stack web application that detects forged or tampered documents using computer vision and deep learning techniques.
+🚀 AI-powered full-stack web application for detecting forged or tampered documents
 
 </div>
 📌 Overview
 
-Document forgery is a serious issue in legal, financial, and government sectors.
+Document forgery is a critical issue in legal, financial, and governmental systems.
 This system automatically analyzes uploaded document images and detects possible tampering such as:
 
-Splicing
-Copy-move forgery
-Region manipulation
-Image retouching
+✂️ Splicing (cut & paste manipulation)
+🧩 Copy-move forgery
+🎨 Region-based editing or manipulation
+🖌️ Image retouching
 
-It combines classical image forensics with deep learning for high accuracy detection.
+It combines classical image forensics with deep learning models to deliver accurate and fast detection results.
 
 ✨ Features
-📄 Upload document images (JPG, PNG, PDF render support)
+📄 Upload document images (JPG, PNG, PDF-rendered images)
 🧠 AI-based detection using EfficientNet CNN
 🔍 Error Level Analysis (ELA)
 🧩 Copy-move forgery detection (ORB + RANSAC)
-📊 Confidence score with verdict (Authentic / Forged)
+📊 Confidence score with final verdict (Authentic / Forged)
 🗺️ Heatmap visualization of tampered regions
 ⚡ Fast processing (< 2 seconds inference)
-📱 Responsive modern UI
-📥 Downloadable analysis report (PDF)
+📱 Fully responsive modern UI
+📥 Downloadable PDF analysis report
 🛠 Tech Stack
 Layer	Technology
 Frontend	Next.js, TypeScript, Tailwind CSS
 Backend	FastAPI (Python)
-ML / CV	OpenCV, NumPy, Pillow
+Computer Vision	OpenCV, NumPy, Pillow
 Deep Learning	PyTorch / TensorFlow (EfficientNet-B0)
-Deployment	Vercel + Render
+Deployment	Vercel (Frontend), Render (Backend)
 Storage	Local / AWS S3
 🚀 How It Works
 Document Upload
@@ -47,11 +40,9 @@ Document Upload
 Preprocessing (resize, normalization)
       ↓
 ┌──────────────────────────────────────────────┐
-│                                              │
-│  1. Error Level Analysis (ELA)               │
-│  2. Copy-Move Detection                     │
-│  3. CNN Classification (EfficientNet)       │
-│                                              │
+│  1. Error Level Analysis (ELA)              │
+│  2. Copy-Move Detection (ORB + RANSAC)     │
+│  3. CNN Classification (EfficientNet)      │
 └──────────────────────────────────────────────┘
       ↓
 Weighted Fusion Model
@@ -60,16 +51,16 @@ Final Verdict + Confidence Score
 📁 Project Structure
 Document_Forgery_Detection/
 │
-├── Document_Forgery_Detection/   # Frontend (Next.js)
-│   ├── src/
+├── frontend/                         # Next.js frontend
 │   ├── app/
+│   ├── src/
 │   ├── components/
 │   └── public/
 │
-├── backend/                      # FastAPI backend
+├── backend/                          # FastAPI backend
 │   ├── api/
 │   │   ├── main.py
-│   │   ├── routes/
+│   │   └── routes/
 │   ├── ml/
 │   │   ├── ela.py
 │   │   ├── copy_move.py
@@ -80,7 +71,7 @@ Document_Forgery_Detection/
 ├── requirements.txt
 └── package.json
 ⚙️ Installation & Setup
-1. Clone Repository
+1️⃣ Clone Repository
 git clone https://github.com/Shahzaib-S110/AuthenticGuard.git
 cd AuthenticGuard
 🧠 Backend Setup (FastAPI)
@@ -94,31 +85,29 @@ pip install -r requirements.txt
 uvicorn api.main:app --reload --port 8000
 
 Backend runs at:
+👉 http://localhost:8000
 
-http://localhost:8000
+API Docs:
+👉 http://localhost:8000/docs
 
-API docs:
-
-http://localhost:8000/docs
 💻 Frontend Setup (Next.js)
-cd Document_Forgery_Detection
+cd frontend
 
 npm install
-
 npm run dev
 
 Frontend runs at:
+👉 http://localhost:3000
 
-http://localhost:3000
 🌐 Environment Variables
 
-Create .env.local:
+Create a .env.local file in frontend:
 
 NEXT_PUBLIC_API_URL=http://localhost:8000
 📡 API Endpoint
-POST /detect
+🔹 POST /detect
 
-Upload document for analysis.
+Upload a document image for analysis.
 
 Request:
 
@@ -139,31 +128,32 @@ CNN (EfficientNet)	88%
 Ensemble Model	91%
 📸 Screenshots
 
-Add images in /screenshots folder
+Add images inside /screenshots folder
 
-Upload Page → results/upload.png
-Results Page → results/output.png
+Upload Page → screenshots/upload.png
+Results Page → screenshots/results.png
 🚀 Deployment
 Frontend
-Vercel → https://vercel.com
+Vercel: https://vercel.com
 Backend
-Render → https://render.com
+Render: https://render.com
 🤝 Contributing
-1. Fork repo
-2. Create feature branch
-3. Commit changes
-4. Push branch
-5. Open PR
-👤 Author
 
-Shahzaib Sheikh
+Contributions are welcome!
 
+Steps:
+Fork the repository
+Create a new branch (feature-new)
+Commit changes
+Push branch
+Open a Pull Request
+👥 Contributors
+👤 Shahzaib Sheikh (Project Owner)
 GitHub: https://github.com/Shahzaib-S110
-
 ⭐ Support
 
 If you like this project:
 
-⭐ Star the repo
+⭐ Star the repository
 🍴 Fork it
-🚀 Share it
+🚀 Share it with others
