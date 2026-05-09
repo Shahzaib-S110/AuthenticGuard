@@ -1,7 +1,8 @@
 """
-Document Guard — FastAPI Backend
-Performs ELA, Edge Detection, Texture/Noise analysis on uploaded images
-and returns authenticity scores + base64-encoded processed images for the UI.
+Document Guard — FastAPI Backend (FIXED VERSION)
+- Safe JSON responses
+- Stable ML output handling
+- Frontend-compatible (/analyze + /verify-document)
 """
 
 from fastapi import FastAPI, File, UploadFile, HTTPException
@@ -9,20 +10,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
 import fitz
+import json
 
 from detector import DocumentAuthenticityDetector
 
-app = FastAPI(title="Document Guard API", version="2.0.0")
+app = FastAPI(title="Document Guard API", version="2.0.1")
 
-# Allow the Vite dev server (port 5173 / 8080) to call the API
+# =========================
+# CORS (FIXED FOR DEPLOYMENT)
+# =========================
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:8080",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:8080",
-    ],
+    allow_origins=["*"],  # change to your frontend URL later
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -30,111 +29,179 @@ app.add_middleware(
 
 detector = DocumentAuthenticityDetector()
 
-ACCEPTED_TYPES = {"image/jpeg", "image/png", "image/jpg", "application/pdf"}
-MAX_FILE_SIZE  = 10 * 1024 * 1024  # 10 MB
+ACCEPTED_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/jpg",
+    "application/pdf"
+}
+
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 
+# =========================
+# HEALTH CHECK
+# =========================
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
 
-@app.post("/verify-document")
-async def verify_document(file: UploadFile = File(...)):
+# =========================
+# CORE FUNCTION (SAFE WRAPPER)
+# =========================
+def safe_json(data):
+    """Ensure all numpy / objects are JSON serializable"""
+    return json.loads(json.dumps(data, default=str))
+
+
+def run_analysis(contents, filename, is_pdf_flag, pdf_text="", pdf_metadata=None):
     """
-    Accepts a JPG or PNG image and returns:
-    - authenticity_score  (0–100, higher = more genuine)
-    - verdict             (string label)
-    - confidence          (0–100, maps to authenticity_score for UI)
-    - suspiciousRegions   (int count of flagged areas)
-    - details             (list of per-technique findings)
-    - processedImages     (dict with base64 ELA / edges / texture images)
-    - analysisTime        (seconds, float)
+    Runs ML analysis safely and guarantees JSON output
     """
-    if file.content_type not in ACCEPTED_TYPES:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid file type. Please upload a PDF, JPG, or PNG document.",
-        )
+    if pdf_metadata is None:
+        pdf_metadata = {}
 
-    contents = await file.read() # Read contents once
+    result = detector.analyze(
+        contents,
+        filename or "document",
+        is_pdf=is_pdf_flag
+    )
 
-    if len(contents) > MAX_FILE_SIZE:
-        raise HTTPException(
-            status_code=400,
-            detail="File too large. Maximum size is 10 MB.",
-        )
+    # 🔥 FIX: ensure required keys exist
+    result.setdefault("flags", [])
+    result.setdefault("details", [])
 
-    pdf_text = ""
-    pdf_metadata = {}
-    is_pdf_flag = (file.content_type == "application/pdf")
-
+    # -------------------------
+    # PDF EXTRA CHECKS
+    # -------------------------
     if is_pdf_flag:
-        try:
-            pdf_doc = fitz.open(stream=contents, filetype="pdf")
-            if len(pdf_doc) == 0:
-                raise ValueError("PDF document is empty.")
-            
-            first_page = pdf_doc[0]
-            pdf_text = first_page.get_text("text").lower()
-            pdf_metadata = pdf_doc.metadata or {}
+        import base64
+        b64 = base64.b64encode(contents).decode("utf-8")
+        result["originalImage"] = f"data:image/png;base64,{b64}"
 
-            # Render page to Pixmap at ~150 DPI gives good quality vs size trade-off
-            pix = first_page.get_pixmap(dpi=150)
-            image_bytes = pix.tobytes("png")
-            pdf_doc.close()
-        except Exception as e:
+        # Fake keyword detection
+        suspicious_text = ["template", "sample", "demo", "fake", "specimen"]
+        found_text = [t for t in suspicious_text if t in pdf_text]
+
+        if found_text:
+            result["authenticity_score"] = max(0, result.get("authenticity_score", 100) - 60)
+            result["verdict"] = "LIKELY FAKE"
+            kw_str = ", ".join(found_text).upper()
+
+            result["flags"].append(f"Fake keywords found: {kw_str}")
+            result["details"].append({
+                "technique": "PDF Text Analysis",
+                "finding": f"Detected watermark keywords: {kw_str}",
+                "severity": "high",
+                "score": 10.0
+            })
+
+        # Metadata check
+        suspicious_meta = ["fpdf", "tcpdf", "reportlab", "html2pdf"]
+        producer = pdf_metadata.get("producer", "").lower()
+        creator = pdf_metadata.get("creator", "").lower()
+
+        found_meta = [m for m in suspicious_meta if m in producer or m in creator]
+
+        if found_meta:
+            result["authenticity_score"] = max(0, result.get("authenticity_score", 100) - 40)
+
+            if result["authenticity_score"] < 45:
+                result["verdict"] = "LIKELY FAKE"
+
+            mb_str = ", ".join(found_meta)
+            result["flags"].append(f"Generated by script engine: {mb_str}")
+            result["details"].append({
+                "technique": "PDF Metadata Analysis",
+                "finding": f"Generated using {mb_str}",
+                "severity": "high",
+                "score": 20.0
+            })
+
+    return safe_json(result)
+
+
+# =========================
+# MAIN ENDPOINT (RECOMMENDED)
+# =========================
+@app.post("/analyze")
+@app.post("/verify-document")
+async def analyze_document(file: UploadFile = File(...)):
+    try:
+        # Validate file type
+        if file.content_type not in ACCEPTED_TYPES:
             raise HTTPException(
                 status_code=400,
-                detail=f"Failed to parse PDF document: {e}",
+                detail="Invalid file type. Upload PDF, JPG, or PNG."
             )
-    else:
-        image_bytes = contents
 
-    try:
-        is_pdf_flag = (file.content_type == "application/pdf")
-        result = detector.analyze(image_bytes, file.filename or "document", is_pdf=is_pdf_flag)
+        contents = await file.read()
+
+        # Validate size
+        if len(contents) > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=400,
+                detail="File too large (max 10MB)."
+            )
+
+        pdf_text = ""
+        pdf_metadata = {}
+        is_pdf_flag = file.content_type == "application/pdf"
+
+        # -------------------------
+        # PDF Handling
+        # -------------------------
         if is_pdf_flag:
-            import base64
-            b64 = base64.b64encode(image_bytes).decode("utf-8")
-            result["originalImage"] = f"data:image/png;base64,{b64}"
+            try:
+                pdf_doc = fitz.open(stream=contents, filetype="pdf")
 
-            # --- PDF Digital Forgery Checks ---
-            suspicious_text = ["template", "sample", "demo", "fake", "specimen"]
-            found_text = [t for t in suspicious_text if t in pdf_text]
-            if found_text:
-                result["authenticity_score"] = max(0, result["authenticity_score"] - 60)
-                result["verdict"] = "LIKELY FAKE"
-                kw_str = ", ".join(found_text).upper()
-                result["flags"].append(f"PDF text layer contains fake/watermark keywords: {kw_str}")
-                result["details"].append({
-                    "technique": "PDF Text Analysis",
-                    "finding": f"Found watermark traces ({kw_str}) hidden in document text.",
-                    "severity": "high",
-                    "score": 10.0
-                })
+                if len(pdf_doc) == 0:
+                    raise ValueError("Empty PDF")
 
-            suspicious_meta = ["fpdf", "tcpdf", "reportlab", "pdfreactor", "html2pdf"]
-            producer = pdf_metadata.get("producer", "").lower()
-            creator = pdf_metadata.get("creator", "").lower()
-            found_meta = [m for m in suspicious_meta if m in producer or m in creator]
-            if found_meta:
-                result["authenticity_score"] = max(0, result["authenticity_score"] - 40)
-                if result["authenticity_score"] < 45:
-                    result["verdict"] = "LIKELY FAKE"
-                mb_str = ", ".join(found_meta)
-                result["flags"].append(f"PDF generated by generic script engine: {mb_str}")
-                result["details"].append({
-                    "technique": "PDF Metadata Analysis",
-                    "finding": f"Document was scripted using {mb_str} instead of standard software.",
-                    "severity": "high",
-                    "score": 20.0
-                })
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(exc)}")
+                page = pdf_doc[0]
+                pdf_text = page.get_text("text").lower()
+                pdf_metadata = pdf_doc.metadata or {}
 
-    return JSONResponse(content=result)
+                pix = page.get_pixmap(dpi=150)
+                contents = pix.tobytes("png")
+
+                pdf_doc.close()
+
+            except Exception as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"PDF processing failed: {str(e)}"
+                )
+
+        # -------------------------
+        # ML Analysis
+        # -------------------------
+        result = run_analysis(
+            contents,
+            file.filename,
+            is_pdf_flag,
+            pdf_text,
+            pdf_metadata
+        )
+
+        return JSONResponse(content=result)
+
+    except HTTPException as he:
+        return JSONResponse(
+            status_code=he.status_code,
+            content={"success": False, "error": he.detail}
+        )
+
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": str(e)}
+        )
 
 
+# =========================
+# LOCAL RUN
+# =========================
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000)
