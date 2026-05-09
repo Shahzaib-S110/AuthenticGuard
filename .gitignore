@@ -1,0 +1,10 @@
+venv/
+**/venv/
+node_modules/
+.next/
+__pycache__/
+*.pyc
+*.pt
+*.pth
+.env
+.env.local
